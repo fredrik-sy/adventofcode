@@ -1,182 +1,195 @@
 
+from dataclasses import dataclass
 from io import open
-from queue import Queue
+from itertools import cycle
 import numpy as np
 
 
+@dataclass
 class Rock:
-    def __init__(self, array, y) -> None:
-        self.array = array
-        self.y = y
+    array: np.ndarray
+    y: int
 
-    def height(self, array=None):
-        return self.array.shape[0] if array is None else array.shape[0]
-
-    def width(self, array=None):
-        return self.array.shape[1] if array is None else array.shape[1]
-
-    def pad_left(self, array, size):
-        return np.hstack((np.zeros((self.height(array), size), int), array))
-
-    def pad_right(self, array, size):
-        return np.hstack((array, np.zeros((self.height(array), size), int)))
-
-    def slice_left(self):
-        return self.array[:, 1:]
-
-    def merge_towerrock(self, tower, rock, y):
-        tower_height = self.height(tower)
-
-        if tower_height == 0:
-            tower = np.zeros((1, 7), int)
-
-        array = self.pad_right(rock, 7 - self.width())
-        maxy = max(0, y - self.height(array))
-        miny = max(-y, -self.height(array))
-        towerrock = np.concatenate(
-            (array[0:self.height(array)+miny], tower[maxy:y] + array[np.r_[miny:0]]))
-        return np.concatenate((tower[0:maxy], towerrock, tower[np.r_[y-tower_height:0]]))
-
-    def push(self, tower, rock):
-        miny = max(0, -self.y - self.height())
-        maxy = max(self.y, -self.height(rock))
-        rock = self.pad_right(rock, 7 - self.width(rock))
-        towerrock = tower[miny:-self.y] + rock[np.r_[maxy:0]]
-        return np.all(towerrock <= 1)
-
-    def push_left(self, tower):
-        if np.any(self.array[:, 0] > 0):
-            return
-
-        array = self.slice_left()
-
-        if self.is_free_fall():
-            self.array = array
-            return
-
-        if self.push(tower, array):
-            self.array = array
-
-    def push_right(self, tower):
-        if self.width() == 7:
-            return
-
-        array = self.pad_left(self.array, 1)
-
-        if self.is_free_fall():
-            self.array = array
-            return
-
-        if self.push(tower, array):
-            self.array = array
-
-    def is_free_fall(self):
-        return self.y > 0
-
-    def fall(self, tower):
-        if self.is_free_fall():
-            self.y -= 1
-            return True
-
-        y = abs(self.y - 1)
-        towerrock = self.merge_towerrock(tower, self.array, y)
-
-        if np.any(towerrock > 1) or self.height(tower) <= y:
-            return False
-
-        self.y -= 1
-        return True
-
-    def rest(self, tower):
-        return self.merge_towerrock(tower, self.array, abs(self.y))
-
-
-class Chamber:
-    def __init__(self) -> None:
-        self.fallen_rocks = 0
-        self.rock = None
-        self.rocks = Queue()
-        self.rocks.put(np.array([[0, 0, 1, 1, 1, 1]]))
-        self.rocks.put(np.array([[0, 0, 0, 1, 0],
-                                 [0, 0, 1, 1, 1],
-                                 [0, 0, 0, 1, 0]]))
-        self.rocks.put(np.array([[0, 0, 0, 0, 1],
-                                 [0, 0, 0, 0, 1],
-                                 [0, 0, 1, 1, 1]]))
-        self.rocks.put(np.array([[0, 0, 1],
-                                 [0, 0, 1],
-                                 [0, 0, 1],
-                                 [0, 0, 1]]))
-        self.rocks.put(np.array([[0, 0, 1, 1],
-                                 [0, 0, 1, 1]]))
-        self.tower = np.zeros((0, 7), dtype=int)
-
+    @property
     def height(self):
-        return self.tower.shape[0]
+        return self.array.shape[0]
 
+    @property
     def width(self):
-        return self.tower.shape[1]
+        return self.array.shape[1]
 
-    def update(self, direction):
-        if not self.rock:
-            array = self.rocks.get()
-            self.rocks.put(array)
-            self.rock = Rock(array, 3)
 
-        if direction == '>':
-            self.rock.push_right(self.tower)
-        else:
-            self.rock.push_left(self.tower)
+@dataclass
+class Tower:
+    array: np.ndarray
+    fallen_rocks: int
+    y: int
 
-        if not self.rock.fall(self.tower):
-            self.tower = self.rock.rest(self.tower)
-            self.rock = None
-            self.fallen_rocks += 1
+    @property
+    def height(self):
+        return self.array.shape[0]
 
-        if self.has_cycle():
-            print(self.fallen_rocks)
-            exit(0)
+    @property
+    def width(self):
+        return self.array.shape[1]
 
-    def has_cycle(self):
-        height = self.height()
 
-        if height < 120:
-            return False
+def input():
+    with open('input.txt') as io:
+        return cycle(list(io.read()))
 
-        seek = self.tower[height-10:height]
 
-        for y in range(10, height-10):
-            lookup = self.tower[height-10-y:height-y]
+def rocks_types():
+    return cycle([
+        np.array([[0, 0, 1, 1, 1, 1]]),
+        np.array([[0, 0, 0, 1, 0],
+                  [0, 0, 1, 1, 1],
+                  [0, 0, 0, 1, 0]]),
+        np.array([[0, 0, 0, 0, 1],
+                  [0, 0, 0, 0, 1],
+                  [0, 0, 1, 1, 1]]),
+        np.array([[0, 0, 1],
+                  [0, 0, 1],
+                  [0, 0, 1],
+                  [0, 0, 1]]),
+        np.array([[0, 0, 1, 1],
+                  [0, 0, 1, 1]])
+    ])
 
-            if np.array_equal(seek, lookup):
-                return True
 
+def pad_left(rock: Rock, length):
+    return Rock(np.hstack((np.zeros((rock.height, length), int), rock.array)), rock.y)
+
+
+def pad_right(rock: Rock, length):
+    return Rock(np.hstack((rock.array, np.zeros((rock.height, length), int))), rock.y)
+
+
+def slice_left(rock: Rock, length):
+    return Rock(rock.array[:, length:], rock.y)
+
+
+def slice_right(rock: Rock, length):
+    return Rock(rock.array[:, :rock.width-length], rock.y)
+
+
+def push_left(tower: Tower, rock: Rock):
+    if np.any(rock.array[:, 0] > 0):
+        return rock
+
+    pushed_rock = slice_left(rock, 1)
+
+    if intersect(tower, pushed_rock):
+        return rock
+
+    return pushed_rock
+
+
+def push_right(tower: Tower, rock: Rock):
+    if rock.width == 7:
+        return rock
+
+    pushed_rock = pad_left(rock, 1)
+
+    if intersect(tower, pushed_rock):
+        return rock
+
+    return pushed_rock
+
+
+def fall(tower: Tower, rock: Rock):
+    rock.y += 1
+
+    if rock.y + rock.height > tower.height or intersect(tower, rock):
+        rock.y -= 1
         return False
 
-
-def lmap(func, iterables):
-    return list(map(func, iterables))
+    return True
 
 
-def parseInput():
-    with open('input.txt') as io:
-        return list(io.read())
+def intersect(tower: Tower, rock: Rock):
+    return np.any(intersection(tower, rock) > 1)
+
+
+def intersection(tower: Tower, rock: Rock):
+    rock = pad_right(rock, 7 - rock.width)
+    return tower.array[rock.y:rock.y+rock.height] + rock.array
+
+
+def join(tower: Tower, rock: Rock):
+    return Tower(np.concatenate((tower.array[:rock.y], intersection(tower, rock), tower.array[rock.y+rock.height:])),
+                 tower.fallen_rocks + 1,
+                 min(tower.y, rock.y))
+
+
+def next_rock(tower: Tower, rocks):
+    rock = next(rocks)
+    rock = Rock(rock, tower.y - rock.shape[0] - 3)
+    return rock
+
+
+def repeat_cycle_height(tower: Tower, count_rocks: dict[int, int]):
+    length = 30
+
+    for y in range(tower.height, tower.y, -1):
+        search = tower.array[y - length:y]
+
+        for i in range(y - 1, tower.y, -1):
+            if np.array_equal(search, tower.array[i - length:i]):
+                for y in range(i - 1, tower.y, -1):
+                    if np.array_equal(search, tower.array[y - length:y]):
+                        height = i - y
+                        fallen_rocks = sum(count_rocks.get(n, 0) for n in range(y, i))
+                        repeat = int((1000000000000 - tower.fallen_rocks) / fallen_rocks)
+                        tower.fallen_rocks += repeat * fallen_rocks
+                        return repeat * height
 
 
 def part1():
-    jets = parseInput()
-    chamber = Chamber()
-    i = 0
+    jets = input()
+    tower = Tower(np.zeros((10000, 7), dtype=int), 0, 10000)
+    rocks = rocks_types()
 
-    while chamber.fallen_rocks <= 1000000000000:
-        chamber.update(jets[i % len(jets)])
-        i += 1
+    rock = next_rock(tower, rocks)
 
-    print(f'Part 1: {chamber.height()}')
+    while tower.fallen_rocks < 2022:
+        if next(jets) == '>':
+            rock = push_right(tower, rock)
+        else:
+            rock = push_left(tower, rock)
+
+        if not fall(tower, rock):
+            tower = join(tower, rock)
+            rock = next_rock(tower, rocks)
+
+    print(f'Part 1: {tower.height - tower.y}')
 
 
 def part2():
-    jets = parseInput()
+    jets = input()
+    tower = Tower(np.zeros((100000, 7), dtype=int), 0, 100000)
+    count_rocks = {}
+    rocks = rocks_types()
+    bonus_height = 0
+
+    rock = next_rock(tower, rocks)
+
+    while tower.fallen_rocks < 1000000000000:
+        if next(jets) == '>':
+            rock = push_right(tower, rock)
+        else:
+            rock = push_left(tower, rock)
+
+        if not fall(tower, rock):
+            tower = join(tower, rock)
+            rock = next_rock(tower, rocks)
+            count_rocks.setdefault(rock.y, 0)
+            count_rocks[rock.y] += 1
+
+            if tower.y <= 2000 and bonus_height == 0:
+                bonus_height = repeat_cycle_height(tower, count_rocks)
+
+    print(f'Part 2: {tower.height - tower.y + bonus_height}')
 
 
 if __name__ == '__main__':
